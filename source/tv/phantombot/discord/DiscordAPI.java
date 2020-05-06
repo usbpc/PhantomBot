@@ -31,7 +31,6 @@ import discord4j.core.event.domain.role.RoleCreateEvent;
 import discord4j.core.event.domain.role.RoleDeleteEvent;
 import discord4j.core.event.domain.role.RoleUpdateEvent;
 import discord4j.core.object.entity.Guild;
-import discord4j.core.object.entity.Member;
 import discord4j.core.object.entity.Message;
 import discord4j.core.object.entity.Role;
 import discord4j.core.object.entity.User;
@@ -39,14 +38,17 @@ import discord4j.core.object.entity.channel.Channel;
 import discord4j.core.object.entity.channel.GuildMessageChannel;
 import discord4j.core.object.entity.channel.PrivateChannel;
 import discord4j.gateway.intent.IntentSet;
+import discord4j.rest.util.Snowflake;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import reactor.core.publisher.Mono;
 import tv.phantombot.PhantomBot;
 import tv.phantombot.discord.util.DiscordUtil;
 import tv.phantombot.event.EventBus;
@@ -77,6 +79,7 @@ public class DiscordAPI extends DiscordUtil {
     private static ConnectionState reconnectState = ConnectionState.DISCONNECTED;
     private static DiscordClientBuilder builder;
     private boolean ready;
+    private static Optional<Snowflake> selfId = Optional.empty();
 
     /**
      * Method to return this class object.
@@ -124,6 +127,7 @@ public class DiscordAPI extends DiscordUtil {
         }).doOnSuccess(cgateway -> {
             DiscordAPI.gateway = cgateway;
             subscribeToEvents();
+            DiscordAPI.selfId = cgateway.getSelfId().blockOptional(Duration.ofSeconds(5));
         }).subscribe();
     }
 
@@ -144,6 +148,7 @@ public class DiscordAPI extends DiscordUtil {
         }).doOnSuccess(cgateway -> {
             DiscordAPI.gateway = cgateway;
             subscribeToEvents();
+            DiscordAPI.selfId = cgateway.getSelfId().blockOptional(Duration.ofSeconds(5));
         }).subscribe();
 
         return isLoggedIn();
@@ -175,11 +180,7 @@ public class DiscordAPI extends DiscordUtil {
      * @return
      */
     public boolean isLoggedIn() {
-        try {
-            return DiscordAPI.gateway.getSelfId().hasElement().blockOptional().isPresent();
-        } catch (NullPointerException ex) {
-            return false;
-        }
+        return DiscordAPI.selfId.isPresent();
     }
 
     /**
@@ -191,9 +192,10 @@ public class DiscordAPI extends DiscordUtil {
         return ready;
     }
 
+    @SuppressWarnings("null")
     public void testJoin() {
         try {
-            DiscordEventListener.onDiscordUserJoinEvent(new MemberJoinEvent(gateway, null, gateway.getSelf().block().asMember(DiscordAPI.guild.getId()).block(), 0));
+            DiscordEventListener.onDiscordUserJoinEvent(new MemberJoinEvent(gateway, null, gateway.getSelf().block(Duration.ofSeconds(5)).asMember(DiscordAPI.guild.getId()).block(Duration.ofSeconds(5)), 0));
         } catch (Exception e) {
             com.gmt2001.Console.debug.printStackTrace(e);
         }
@@ -316,58 +318,44 @@ public class DiscordAPI extends DiscordUtil {
 
         public static void onDiscordMessageEvent(MessageCreateEvent event) {
             Message iMessage = event.getMessage();
-            Channel iChannel = null;
-
-            try {
-                iChannel = iMessage.getChannel().block(Duration.ofSeconds(10));
-            } catch (Exception e) {
-                com.gmt2001.Console.debug.printStackTrace(e);
-            }
-
-            User iUser = event.getMember().orElse(null);
-
-            if (iChannel == null) {
+            if (iMessage.getContent() == null || processedMessages.contains(iMessage.getId().asLong())) {
                 return;
             }
 
-            if (iUser == null && iChannel.getType() == Channel.Type.DM) {
-                iUser = ((PrivateChannel) iChannel).getRecipients().blockFirst();
-            }
+            iMessage.getChannel().timeout(Duration.ofMillis(500)).doOnSuccess(iChannel -> {
+                User iUser = event.getMember().isPresent() ? event.getMember().get() : ((PrivateChannel) iChannel).getRecipients().take(1).singleOrEmpty().block(Duration.ofMillis(500));
 
-            if (iUser == null || iUser.getId().equals(gateway.getSelfId().block())) {
-                return;
-            }
-
-            String username = iUser.getUsername().toLowerCase();
-            String message = iMessage.getContent();
-            String channel;
-            boolean isAdmin = DiscordAPI.instance().isAdministrator(iUser);
-
-            if (message == null || processedMessages.contains(iMessage.getId().asLong())) {
-                return;
-            }
-
-            processedMessages.add(iMessage.getId().asLong());
-            listTimer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    processedMessages.remove(iMessage.getId().asLong());
+                if (iUser == null || (DiscordAPI.selfId.isPresent() && iUser.getId().equals(DiscordAPI.selfId.get()))) {
+                    return;
                 }
-            }, 5000);
 
-            if (iChannel.getType() == Channel.Type.DM) {
-                channel = "DM";
-            } else {
-                channel = "#" + ((GuildMessageChannel) iChannel).getName();
-            }
+                String username = iUser.getUsername().toLowerCase();
+                String message = iMessage.getContent();
+                String channel;
+                Mono<Boolean> isAdmin = DiscordAPI.instance().isAdministratorAsync(iUser);
 
-            com.gmt2001.Console.out.println("[DISCORD] [" + channel + "] " + username + ": " + message);
+                processedMessages.add(iMessage.getId().asLong());
+                listTimer.schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        processedMessages.remove(iMessage.getId().asLong());
+                    }
+                }, 5000);
 
-            if (message.charAt(0) == '!') {
-                DiscordAPI.instance().parseCommand(iUser, iChannel, iMessage, isAdmin);
-            }
+                if (iChannel.getType() == Channel.Type.DM) {
+                    channel = "DM";
+                } else {
+                    channel = "#" + ((GuildMessageChannel) iChannel).getName();
+                }
 
-            EventBus.instance().postAsync(new DiscordChannelMessageEvent(iUser, iChannel, iMessage, isAdmin));
+                com.gmt2001.Console.out.println("[DISCORD] [" + channel + "] " + username + ": " + message);
+
+                if (message.charAt(0) == '!') {
+                    DiscordAPI.instance().parseCommand(iUser, iChannel, iMessage, isAdmin.block(Duration.ofMillis(500)));
+                }
+
+                EventBus.instance().postAsync(new DiscordChannelMessageEvent(iUser, iChannel, iMessage, isAdmin.block(Duration.ofMillis(500))));
+            }).doOnError(e -> com.gmt2001.Console.debug.printStackTrace(e)).subscribe();
         }
 
         public static void onDiscordUserJoinEvent(MemberJoinEvent event) {
@@ -406,9 +394,17 @@ public class DiscordAPI extends DiscordUtil {
 
         public static void onDiscordVoiceStateUpdateEvent(VoiceStateUpdateEvent event) {
             if (event.getCurrent().getChannelId().get() == null) {
-                EventBus.instance().postAsync(new DiscordUserVoiceChannelPartEvent(event.getCurrent().getUser().block(), event.getOld().get().getChannel().block()));
+                event.getCurrent().getUser().doOnSuccess(user -> {
+                    event.getOld().get().getChannel().doOnSuccess(channel -> {
+                        EventBus.instance().postAsync(new DiscordUserVoiceChannelPartEvent(user, channel));
+                    }).subscribe();
+                }).subscribe();
             } else {
-                EventBus.instance().postAsync(new DiscordUserVoiceChannelJoinEvent(event.getCurrent().getUser().block(), event.getCurrent().getChannel().block()));
+                event.getCurrent().getUser().doOnSuccess(user -> {
+                    event.getCurrent().getChannel().doOnSuccess(channel -> {
+                        EventBus.instance().postAsync(new DiscordUserVoiceChannelJoinEvent(user, channel));
+                    }).subscribe();
+                }).subscribe();
             }
         }
     }
