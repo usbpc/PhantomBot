@@ -18,7 +18,11 @@ package com.gmt2001;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.JarEntry;
@@ -29,7 +33,6 @@ import java.util.jar.JarInputStream;
  * @author gmt2001
  */
 public final class Reflect {
-
     private static final Reflect instance = new Reflect();
 
     public static Reflect instance() {
@@ -43,25 +46,51 @@ public final class Reflect {
         pkg = pkg.replace('.', '/');
         ClassLoader classLoader = Reflect.class.getClassLoader();
         URL u = Reflect.class.getProtectionDomain().getCodeSource().getLocation();
-        try (JarInputStream jar = new JarInputStream(u.openStream())) {
-            JarEntry e;
-            do {
-                e = jar.getNextJarEntry();
+        if (!u.getFile().endsWith("jar")) {
+            try {
+                var path = Paths.get(u.toURI());
+                var pathString = path.toString().length() + 1;
+                Files.walk(path.resolve(pkg))
+                        .filter(Files::isRegularFile)
+                        .map(Path::toString)
+                        .filter(f -> f.endsWith(".class"))
+                        .map(f -> f.substring(pathString))
+                        .map(f -> f.replace('\\', '/'))
+                        .map(f -> f.replace('/', '.'))
+                        .map(f -> f.replace(".class", ""))
+                        .forEach(f -> {
+                            try {
+                                Class.forName(f, true, classLoader);
+                            } catch (ClassNotFoundException ex) {
+                                com.gmt2001.Console.debug.printStackTrace(ex);
+                            }
+                        });
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (URISyntaxException e) {
+                e.printStackTrace();
+            }
+        } else {
+            try (JarInputStream jar = new JarInputStream(u.openStream())) {
+                JarEntry e;
+                do {
+                    e = jar.getNextJarEntry();
 
-                if (e != null) {
-                    String name = e.getName();
+                    if (e != null) {
+                        String name = e.getName();
 
-                    if (name.startsWith(pkg) && name.endsWith(".class")) {
-                        try {
-                            Class.forName(name.replace('/', '.').replace(".class", ""), true, classLoader);
-                        } catch (ClassNotFoundException ex) {
-                            com.gmt2001.Console.debug.printStackTrace(ex);
+                        if (name.startsWith(pkg) && name.endsWith(".class")) {
+                            try {
+                                Class.forName(name.replace('/', '.').replace(".class", ""), true, classLoader);
+                            } catch (ClassNotFoundException ex) {
+                                com.gmt2001.Console.debug.printStackTrace(ex);
+                            }
                         }
                     }
-                }
-            } while (e != null);
-        } catch (IOException ex) {
-            com.gmt2001.Console.debug.printStackTrace(ex);
+                } while (e != null);
+            } catch (IOException ex) {
+                com.gmt2001.Console.debug.printStackTrace(ex);
+            }
         }
     }
 
