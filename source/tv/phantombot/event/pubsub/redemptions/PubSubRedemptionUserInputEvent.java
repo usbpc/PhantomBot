@@ -11,7 +11,7 @@ public class PubSubRedemptionUserInputEvent extends PubSubRedemptionEvent {
      * @param rewardUUID
      * @param cost
      */
-    protected PubSubRedemptionUserInputEvent(String username, String title, String rewardUUID, int cost, String userInput) {
+    public PubSubRedemptionUserInputEvent(String username, String title, String rewardUUID, int cost, String userInput) {
         super(username, title, rewardUUID, cost);
         this.userInput = userInput;
     }

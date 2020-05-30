@@ -48,6 +48,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONException;
+import tv.phantombot.event.pubsub.redemptions.PubSubRedemptionNormalEvent;
+import tv.phantombot.event.pubsub.redemptions.PubSubRedemptionUserInputEvent;
 
 public class TwitchPubSub {
     private static final Map<String, TwitchPubSub> instances = new ConcurrentHashMap<>();
@@ -272,14 +274,14 @@ public class TwitchPubSub {
                 var username = user.getString("display_name");
 
 
-                //TODO figure out if there is a better way than using null!
-                String user_input = null;
-
                 if (reward.getBoolean("is_user_input_required")) {
-                    user_input = redemption.getString("user_input");
+                    var userInput = redemption.getString("user_input");
+                    EventBus.instance().postAsync(new PubSubRedemptionUserInputEvent(username, title, id, cost, userInput));
+                } else {
+                    EventBus.instance().postAsync(new PubSubRedemptionNormalEvent(username, title, id, cost));
                 }
 
-                com.gmt2001.Console.debug.println("[PubSub Reward] Parsed data: cost: " + cost + " title: " + title + " id: " + id + " username: " + username + " user_input: " + user_input);
+                //com.gmt2001.Console.debug.println("[PubSub Reward] Parsed data: cost: " + cost + " title: " + title + " id: " + id + " username: " + username + " user_input: " + user_input);
 
             }
 
@@ -356,10 +358,10 @@ public class TwitchPubSub {
         public void onOpen(ServerHandshake handshakedata) {
             try {
                 com.gmt2001.Console.debug.println("Connected to Twitch PubSub-Edge (SSL) [" + this.uri.getHost() + "]");
-                //TODO change this message
-                com.gmt2001.Console.out.println("Connected to Twitch Moderation Data Feed");
+                com.gmt2001.Console.out.println("Connected to Twitch PubSub WebSocket");
                 
-                
+                //TODO figure out how to join the scopes separately
+
                 String[] type = new String[] {
                         "chat_moderator_actions." + channelId,
                         "channel-points-channel-v1." + channelId

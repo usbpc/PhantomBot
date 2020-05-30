@@ -9,7 +9,7 @@ public class PubSubRedemptionNormalEvent extends PubSubRedemptionEvent {
      * @param rewardUUID
      * @param cost
      */
-    protected PubSubRedemptionNormalEvent(String username, String title, String rewardUUID, int cost) {
+    public PubSubRedemptionNormalEvent(String username, String title, String rewardUUID, int cost) {
         super(username, title, rewardUUID, cost);
     }
 }

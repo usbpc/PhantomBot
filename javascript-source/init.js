@@ -1064,6 +1064,20 @@
         });
 
         /*
+         * @event PubSubRedemptionNormal
+         */
+        $api.on($script, 'PubSubRedemptionNormal', function(event) {
+            callHook('PubSubRedemptionNormal', event, false);
+        });
+
+        /*
+         * @event PubSubRedemptionUserInput
+         */
+        $api.on($script, 'PubSubRedemptionUserInput', function(event) {
+            callHook('PubSubRedemptionUserInput', event, false);
+        });
+
+        /*
          * @event PubSubModerationDelete
          */
         $api.on($script, 'PubSubModerationDelete', function (event) {
