@@ -1134,8 +1134,8 @@ public final class PhantomBot implements Listener {
 
         /* Start a pubsub instance here. */
         //TODO figure out the moderationLog thing
-        checkDataStore("chatModerator", "moderationLogs");
-        if (this.oauth.length() > 0) {
+        // checkDataStore("chatModerator", "moderationLogs");
+        if (this.apiOAuth.length() > 0) {
             this.pubSubEdge = TwitchPubSub.instance(this.channelName, TwitchAPIv5.instance().getChannelId(this.channelName), TwitchAPIv5.instance().getChannelId(this.botName), this.apiOAuth);
         }
 

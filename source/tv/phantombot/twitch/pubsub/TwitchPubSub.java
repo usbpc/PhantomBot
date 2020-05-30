@@ -240,66 +240,99 @@ public class TwitchPubSub {
             JSONObject dataObj;
             JSONObject messageObj;
             JSONObject data;
-            if (message.has("data")) {
-                dataObj = message.getJSONObject("data");
-                if (dataObj.has("message")) {
-                    messageObj = new JSONObject(dataObj.getString("message"));
-                    if (messageObj.has("data")) {
-                        data = messageObj.getJSONObject("data");
-                        if (data.has("moderation_action") && data.has("args") && data.has("created_by")) {
-                            JSONArray args = data.getJSONArray("args");
-                            String action = data.getString("moderation_action");
-                            String creator = data.getString("created_by");
-                            String args1 = args.getString(0);
-                            String args2 = (args.length() == 2 || args.length() == 3 ? args.getString(1) : "");
-                            String args3 = (args.length() == 3 ? args.getString(2) : "");
+            if (!message.has("data"))
+                return;
 
-                            if (timeoutCache.containsKey(data.getString("target_user_id")) && (timeoutCache.get(data.getString("target_user_id")) - System.currentTimeMillis()) > 0) {
-                                return;
-                            }
+            dataObj = message.getJSONObject("data");
 
-                            timeoutCache.put(data.getString("target_user_id"), System.currentTimeMillis() + 1500);
-                            switch (action) {
-                            case "delete":
-                                this.log(args1 + "'s message was deleted by " + creator);
-                                EventBus.instance().postAsync(new PubSubModerationDeleteEvent(args1, creator, args2));
-                                break;
-                            case "timeout":
-                                this.log(args1 + " has been timed out by " + creator + " for " + args2 + " seconds. " + (args3.length() == 0 ? "" : "Reason: " + args3));
-                                EventBus.instance().postAsync(new PubSubModerationTimeoutEvent(args1, creator, (messageCache.containsKey(args1.toLowerCase()) ? messageCache.get(args1.toLowerCase()) : ""), args3, args2));
-                                break;
-                            case "untimeout":
-                                this.log(args1 + " has been un-timed out by " + creator + ".");
-                                EventBus.instance().postAsync(new PubSubModerationUnTimeoutEvent(args1, creator));
-                                break;
-                            case "ban":
-                                this.log(args1 + " has been banned by " + creator + ". " + (args2.length() == 0 ? "" : "Reason: " + args2));
-                                EventBus.instance().postAsync(new PubSubModerationBanEvent(args1, creator, (messageCache.containsKey(args1.toLowerCase()) ? messageCache.get(args1.toLowerCase()) : ""), args2));
-                                break;
-                            case "unban":
-                                this.log(args1 + " has been un-banned by " + creator + ".");
-                                EventBus.instance().postAsync(new PubSubModerationUnBanEvent(args1, creator));
-                                break;
-                            case "mod":
-                                this.log(args1 + " has been modded by " + creator + ".");
-                                break;
-                            case "unmod":
-                                this.log(args1 + " has been un-modded by " + creator + ".");
-                                break;
-                            case "twitchbot_rejected":
-                                this.log("Message (" + args2 + ") from " + args1 + " has been rejected by AutoMod.");
-                                break;
-                            case "denied_twitchbot_message":
-                                this.log(creator + " denied a message from " + args1 + ". Message id: " + data.getString("msg_id") + ".");
-                                break;
-                            case "approved_twitchbot_message":
-                                this.log(creator + " allowed a message from " + args1 + ". Message id: " + data.getString("msg_id") + ".");
-                                break;
-                            }
-                        }
-                    }
+            if (!dataObj.has("message"))
+                return;
+
+            messageObj = new JSONObject(dataObj.getString("message"));
+
+            if (!messageObj.has("data"))
+                return;
+
+            data = messageObj.getJSONObject("data");
+
+            if (messageObj.has("type") && messageObj.getString("type").equals("reward-redeemed")) {
+                com.gmt2001.Console.debug.println("[PubSub] A reward got redeemed: " + data);
+                //Things we need to parse to get to the interesting data
+                var redemption = data.getJSONObject("redemption");
+                var reward = redemption.getJSONObject("reward");
+                var user = redemption.getJSONObject("user");
+
+                //Things that we are actually interested in
+                var cost = reward.getInt("cost");
+                var title = reward.getString("title");
+                var id = reward.getString("id");
+
+                var username = user.getString("display_name");
+
+
+                //TODO figure out if there is a better way than using null!
+                String user_input = null;
+
+                if (reward.getBoolean("is_user_input_required")) {
+                    user_input = redemption.getString("user_input");
+                }
+
+                com.gmt2001.Console.debug.println("[PubSub Reward] Parsed data: cost: " + cost + " title: " + title + " id: " + id + " username: " + username + " user_input: " + user_input);
+
+            }
+
+            if (data.has("moderation_action") && data.has("args") && data.has("created_by")) {
+                JSONArray args = data.getJSONArray("args");
+                String action = data.getString("moderation_action");
+                String creator = data.getString("created_by");
+                String args1 = args.getString(0);
+                String args2 = (args.length() == 2 || args.length() == 3 ? args.getString(1) : "");
+                String args3 = (args.length() == 3 ? args.getString(2) : "");
+
+                if (timeoutCache.containsKey(data.getString("target_user_id")) && (timeoutCache.get(data.getString("target_user_id")) - System.currentTimeMillis()) > 0) {
+                    return;
+                }
+
+                timeoutCache.put(data.getString("target_user_id"), System.currentTimeMillis() + 1500);
+                switch (action) {
+                    case "delete":
+                        this.log(args1 + "'s message was deleted by " + creator);
+                        EventBus.instance().postAsync(new PubSubModerationDeleteEvent(args1, creator, args2));
+                        break;
+                    case "timeout":
+                        this.log(args1 + " has been timed out by " + creator + " for " + args2 + " seconds. " + (args3.length() == 0 ? "" : "Reason: " + args3));
+                        EventBus.instance().postAsync(new PubSubModerationTimeoutEvent(args1, creator, (messageCache.containsKey(args1.toLowerCase()) ? messageCache.get(args1.toLowerCase()) : ""), args3, args2));
+                        break;
+                    case "untimeout":
+                        this.log(args1 + " has been un-timed out by " + creator + ".");
+                        EventBus.instance().postAsync(new PubSubModerationUnTimeoutEvent(args1, creator));
+                        break;
+                    case "ban":
+                        this.log(args1 + " has been banned by " + creator + ". " + (args2.length() == 0 ? "" : "Reason: " + args2));
+                        EventBus.instance().postAsync(new PubSubModerationBanEvent(args1, creator, (messageCache.containsKey(args1.toLowerCase()) ? messageCache.get(args1.toLowerCase()) : ""), args2));
+                        break;
+                    case "unban":
+                        this.log(args1 + " has been un-banned by " + creator + ".");
+                        EventBus.instance().postAsync(new PubSubModerationUnBanEvent(args1, creator));
+                        break;
+                    case "mod":
+                        this.log(args1 + " has been modded by " + creator + ".");
+                        break;
+                    case "unmod":
+                        this.log(args1 + " has been un-modded by " + creator + ".");
+                        break;
+                    case "twitchbot_rejected":
+                        this.log("Message (" + args2 + ") from " + args1 + " has been rejected by AutoMod.");
+                        break;
+                    case "denied_twitchbot_message":
+                        this.log(creator + " denied a message from " + args1 + ". Message id: " + data.getString("msg_id") + ".");
+                        break;
+                    case "approved_twitchbot_message":
+                        this.log(creator + " allowed a message from " + args1 + ". Message id: " + data.getString("msg_id") + ".");
+                        break;
                 }
             }
+
         }
 
         /**
