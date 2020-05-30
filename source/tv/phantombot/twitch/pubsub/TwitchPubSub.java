@@ -240,7 +240,6 @@ public class TwitchPubSub {
             JSONObject dataObj;
             JSONObject messageObj;
             JSONObject data;
-
             if (message.has("data")) {
                 dataObj = message.getJSONObject("data");
                 if (dataObj.has("message")) {
@@ -321,10 +320,14 @@ public class TwitchPubSub {
         public void onOpen(ServerHandshake handshakedata) {
             try {
                 com.gmt2001.Console.debug.println("Connected to Twitch PubSub-Edge (SSL) [" + this.uri.getHost() + "]");
+                //TODO change this message
                 com.gmt2001.Console.out.println("Connected to Twitch Moderation Data Feed");
                 
                 
-                String[] type = new String[] {"chat_moderator_actions." + botId + "." + channelId};
+                String[] type = new String[] {
+                        "chat_moderator_actions." + channelId,
+                        "channel-points-channel-v1." + channelId
+                };
                 JSONObject jsonObject = new JSONObject();
                 JSONObject topics = new JSONObject();
                 
@@ -332,7 +335,7 @@ public class TwitchPubSub {
                 topics.put("auth_token", oAuth.replace("oauth:", ""));
                 jsonObject.put("type", "LISTEN");
                 jsonObject.put("data", topics);
-                
+
                 send(jsonObject.toString());
             } catch (JSONException ex) {
                 com.gmt2001.Console.err.logStackTrace(ex);
