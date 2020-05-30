@@ -240,6 +240,7 @@ public class TwitchPubSub {
             JSONObject dataObj;
             JSONObject messageObj;
             JSONObject data;
+
             if (!message.has("data"))
                 return;
 
@@ -255,6 +256,7 @@ public class TwitchPubSub {
 
             data = messageObj.getJSONObject("data");
 
+            //This is new code dealing with twitch point reward redemptions
             if (messageObj.has("type") && messageObj.getString("type").equals("reward-redeemed")) {
                 com.gmt2001.Console.debug.println("[PubSub] A reward got redeemed: " + data);
                 //Things we need to parse to get to the interesting data
@@ -281,6 +283,7 @@ public class TwitchPubSub {
 
             }
 
+            //Leaving this code untouched
             if (data.has("moderation_action") && data.has("args") && data.has("created_by")) {
                 JSONArray args = data.getJSONArray("args");
                 String action = data.getString("moderation_action");
